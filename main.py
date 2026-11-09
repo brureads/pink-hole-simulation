@@ -1,254 +1,288 @@
 
 import pygame
-import random
+import numpy as np
 import math
+import random
 
 pygame.init()
 
 # ==========================================
-# PINK HOLE 3.0 - COSMIC FLOW
+# PINK HOLE 5.0 - NEBULA ENGINE
 # ==========================================
 
 LARGURA = 1100
 ALTURA = 700
 FPS = 60
 
+# Renderizamos o plasma em resolucao
+# reduzida para melhorar o desempenho.
+ESCALA = 3
+W = LARGURA // ESCALA
+H = ALTURA // ESCALA
+
 CX = LARGURA // 2
 CY = ALTURA // 2
 
 RAIO_SOMBRA = 65
-RAIO_INTERNO = 88
-RAIO_EXTERNO = 310
 
-tela = pygame.display.set_mode((LARGURA, ALTURA))
-pygame.display.set_caption("Pink Hole 3.0 | Cosmic Flow")
+tela = pygame.display.set_mode(
+    (LARGURA, ALTURA)
+)
+
+pygame.display.set_caption(
+    "Pink Hole 5.0 | Nebula Engine"
+)
+
 relogio = pygame.time.Clock()
+
+# ==========================================
+# FUNDO ESTRELADO
+# ==========================================
 
 random.seed(42)
 
-# ==========================================
-# ESTRELAS
-# ==========================================
+fundo = pygame.Surface(
+    (LARGURA, ALTURA)
+)
 
-estrelas = []
-
-for _ in range(230):
-    estrelas.append((
-        random.randrange(LARGURA),
-        random.randrange(ALTURA),
-        random.randint(55, 190),
-        random.choice([1, 1, 1, 2])
-    ))
-
-# ==========================================
-# PARTICULAS DO DISCO
-# ==========================================
-
-particulas = []
-
-for _ in range(9000):
-    raio = RAIO_INTERNO + (
-        random.random() ** 1.25
-    ) * (RAIO_EXTERNO - RAIO_INTERNO)
-
-    particulas.append({
-        "raio": raio,
-        "angulo": random.uniform(0, math.tau),
-        "velocidade": 0.014 * (120 / raio) ** 1.5,
-        "altura": random.gauss(0, 3),
-        "brilho": random.uniform(0.55, 1.0)
-    })
-
-# ==========================================
-# FUNCOES DE COR
-# ==========================================
-
-def misturar(cor1, cor2, fator):
-    fator = max(0, min(1, fator))
-
-    return tuple(
-        int(a + (b - a) * fator)
-        for a, b in zip(cor1, cor2)
-    )
-
-
-def cor_disco(raio, brilho):
-    t = (
-        (raio - RAIO_INTERNO)
-        / (RAIO_EXTERNO - RAIO_INTERNO)
-    )
-
-    if t < 0.35:
-        cor = misturar(
-            (255, 235, 250),
-            (255, 105, 205),
-            t / 0.35
-        )
-    else:
-        cor = misturar(
-            (255, 105, 205),
-            (165, 20, 105),
-            (t - 0.35) / 0.65
-        )
-
-    return tuple(int(c * brilho) for c in cor)
-
-
-# ==========================================
-# CAMADAS DE DESENHO
-# ==========================================
-
-fundo = pygame.Surface((LARGURA, ALTURA))
 fundo.fill((0, 0, 0))
 
-for x, y, brilho, tamanho in estrelas:
+for _ in range(250):
+    x = random.randrange(LARGURA)
+    y = random.randrange(ALTURA)
+
+    brilho = random.randint(45, 200)
+
     pygame.draw.circle(
         fundo,
         (brilho, brilho, brilho),
         (x, y),
-        tamanho
+        random.choice([1, 1, 2])
     )
 
-disco_tras = pygame.Surface(
-    (LARGURA, ALTURA), pygame.SRCALPHA
-)
-
-disco_frente = pygame.Surface(
-    (LARGURA, ALTURA), pygame.SRCALPHA
-)
-
-lente = pygame.Surface(
-    (LARGURA, ALTURA), pygame.SRCALPHA
-)
-
 # ==========================================
-# LENTE GRAVITACIONAL ARTISTICA
+# COORDENADAS DO PLASMA
 # ==========================================
 
-def desenhar_lente(superficie, tempo):
+# O NumPy cria uma grade de coordenadas.
+# Cada posicao representa um pixel.
 
-    # Faixas suaves, em vez de linhas finas.
-    # A altura e maior no centro do arco.
+xs = (
+    np.arange(W, dtype=np.float32)
+    * ESCALA - CX
+)
 
-    for lado in (-1, 1):
-        for camada in range(36):
+ys = (
+    np.arange(H, dtype=np.float32)
+    * ESCALA - CY
+)
 
-            largura_arco = 112 + camada * 2.2
-            altura_arco = 72 + camada * 1.15
+X, Y = np.meshgrid(xs, ys)
 
-            pontos = []
+# ==========================================
+# CONFIGURACOES INTERATIVAS
+# ==========================================
 
-            for passo in range(100):
-                t = passo / 99
-                nx = -1 + 2 * t
+inclinacao = 0.34
+velocidade = 1.0
+pausado = False
+tempo = 0.0
 
-                curva = math.sqrt(
-                    max(0, 1 - nx * nx)
+# ==========================================
+# FUNCAO DO PLASMA
+# ==========================================
+
+def criar_plasma(t, inclinacao):
+
+    # Corrige a perspectiva do disco
+    # conforme sua inclinacao.
+
+    altura = max(0.12, inclinacao)
+
+    Y_DISCO = Y / altura
+
+    raio = np.sqrt(
+        X * X + Y_DISCO * Y_DISCO
+    )
+
+    angulo = np.arctan2(
+        Y_DISCO, X
+    )
+
+    # Rotacao diferencial:
+    # materia interna gira mais rapido.
+
+    rotacao = (
+        t * 2.5
+        / np.maximum(raio / 100, 0.5) ** 1.5
+    )
+
+    fase = angulo - rotacao
+
+    # Textura turbulenta do plasma
+    turbulencia = (
+        np.sin(fase * 12 + raio * 0.13)
+        * np.sin(fase * 7 - raio * 0.08)
+    )
+
+    turbulencia += (
+        0.5 * np.sin(
+            fase * 23 + raio * 0.21
+        )
+    )
+
+    turbulencia = (
+        turbulencia / 2.5
+    )
+
+    # Disco principal
+    centro_disco = 165
+
+    largura_disco = 85
+
+    densidade = np.exp(
+        -(
+            (raio - centro_disco)
+            / largura_disco
+        ) ** 2
+    )
+
+    # Reduz a luz nas bordas
+    borda_interna = np.clip(
+        (raio - 82) / 28,
+        0, 1
+    )
+
+    borda_externa = np.clip(
+        (315 - raio) / 65,
+        0, 1
+    )
+
+    densidade *= (
+        borda_interna * borda_externa
+    )
+
+    # Faixas luminosas
+    filamentos = (
+        0.75
+        + 0.25 * np.sin(
+            fase * 18
+            + raio * 0.10
+            + turbulencia * 3
+        )
+    )
+
+    plasma = (
+        densidade
+        * filamentos
+        * (1 + turbulencia * 0.35)
+    )
+
+    plasma = np.clip(plasma, 0, 1)
+
+    # ======================================
+    # LUZ CURVADA - EFEITO ARTISTICO
+    # ======================================
+
+    # Arcos que acompanham a geometria
+    # do disco, sem desenhar linhas.
+
+    raio_tela = np.sqrt(
+        X * X + Y * Y
+    )
+
+    arco_superior = np.exp(
+        -(
+            (
+                Y
+                + 100 * np.sqrt(
+                    np.maximum(
+                        0,
+                        1 - (X / 160) ** 2
+                    )
                 )
-
-                x = CX + nx * largura_arco
-                y = CY + lado * curva * altura_arco
-
-                # Pequena oscilacao luminosa
-                y += math.sin(
-                    tempo * 0.7 + t * 8 + camada * 0.15
-                ) * 0.6
-
-                pontos.append((int(x), int(y)))
-
-            intensidade = 1 - camada / 36
-
-            cor = (
-                255,
-                int(65 + intensidade * 145),
-                int(165 + intensidade * 80),
-                int(5 + intensidade * 10)
-            )
-
-            pygame.draw.lines(
-                superficie,
-                cor,
-                False,
-                pontos,
-                3
-            )
-
-
-# ==========================================
-# DESENHA PARTICULAS
-# ==========================================
-
-def desenhar_particula(superficie, p, dt):
-
-    p["angulo"] = (
-        p["angulo"] + p["velocidade"] * dt * 60
-    ) % math.tau
-
-    angulo = p["angulo"]
-    raio = p["raio"]
-
-    x = CX + math.cos(angulo) * raio
-    y = (
-        CY
-        + math.sin(angulo) * raio * 0.34
-        + p["altura"]
+            ) / 24
+        ) ** 2
     )
 
-    cor = cor_disco(raio, p["brilho"])
-
-    pos = (int(x), int(y))
-
-    pygame.draw.circle(
-        superficie,
-        (*cor, 115),
-        pos,
-        1
+    arco_inferior = np.exp(
+        -(
+            (
+                Y
+                - 100 * np.sqrt(
+                    np.maximum(
+                        0,
+                        1 - (X / 160) ** 2
+                    )
+                )
+            ) / 24
+        ) ** 2
     )
 
-    # Trilha curta seguindo a orbita
-    angulo_anterior = angulo - 0.018
-
-    x2 = CX + math.cos(angulo_anterior) * raio
-    y2 = (
-        CY
-        + math.sin(angulo_anterior) * raio * 0.34
-        + p["altura"]
+    limite_arco = np.clip(
+        (170 - np.abs(X)) / 25,
+        0, 1
     )
 
-    pygame.draw.line(
-        superficie,
-        (*cor, 70),
-        (int(x2), int(y2)),
-        pos,
-        1
+    arcos = (
+        arco_superior + arco_inferior
+    ) * limite_arco
+
+    # Textura dos arcos acompanha
+    # o movimento do plasma.
+
+    textura_arco = (
+        0.75
+        + 0.25 * np.sin(
+            X * 0.08
+            - t * 3
+            + Y * 0.03
+        )
     )
 
+    arcos *= textura_arco * 0.75
 
-# ==========================================
-# SUAVIZACAO
-# ==========================================
-
-def aplicar_brilho(destino, camada):
-
-    pequena = pygame.transform.smoothscale(
-        camada,
-        (LARGURA // 4, ALTURA // 4)
+    intensidade = np.clip(
+        plasma + arcos,
+        0, 1.4
     )
 
-    suave = pygame.transform.smoothscale(
-        pequena,
-        (LARGURA, ALTURA)
+    # ======================================
+    # PALETA ROSA
+    # ======================================
+
+    vermelho = np.clip(
+        intensidade * 255,
+        0, 255
     )
 
-    suave.set_alpha(95)
-
-    destino.blit(
-        suave,
-        (0, 0),
-        special_flags=pygame.BLEND_RGBA_ADD
+    verde = np.clip(
+        intensidade ** 1.7 * 185,
+        0, 255
     )
 
-    destino.blit(camada, (0, 0))
+    azul = np.clip(
+        intensidade * 190
+        + intensidade ** 2 * 55,
+        0, 255
+    )
+
+    imagem = np.stack(
+        [vermelho, verde, azul],
+        axis=-1
+    ).astype(np.uint8)
+
+    # ======================================
+    # SOMBRA DO BURACO NEGRO
+    # ======================================
+
+    sombra = raio_tela < RAIO_SOMBRA
+
+    imagem[sombra] = (2, 0, 7)
+
+    # NumPy trabalha com altura x largura,
+    # enquanto o Pygame usa largura x altura.
+    return np.transpose(imagem, (1, 0, 2))
 
 
 # ==========================================
@@ -256,60 +290,82 @@ def aplicar_brilho(destino, camada):
 # ==========================================
 
 executando = True
-tempo = 0
 
 while executando:
 
-    dt = min(relogio.tick(FPS) / 1000, 0.05)
-    tempo += dt
+    dt = min(
+        relogio.tick(FPS) / 1000,
+        0.05
+    )
 
     for evento in pygame.event.get():
+
         if evento.type == pygame.QUIT:
             executando = False
 
         if evento.type == pygame.KEYDOWN:
+
             if evento.key == pygame.K_ESCAPE:
                 executando = False
 
+            if evento.key == pygame.K_SPACE:
+                pausado = not pausado
+
+            if evento.key == pygame.K_r:
+                inclinacao = 0.34
+                velocidade = 1.0
+
+            if evento.key == pygame.K_UP:
+                inclinacao = min(
+                    0.9, inclinacao + 0.05
+                )
+
+            if evento.key == pygame.K_DOWN:
+                inclinacao = max(
+                    0.12, inclinacao - 0.05
+                )
+
+            if evento.key == pygame.K_RIGHT:
+                velocidade = min(
+                    4.0, velocidade + 0.25
+                )
+
+            if evento.key == pygame.K_LEFT:
+                velocidade = max(
+                    0.0, velocidade - 0.25
+                )
+
+    if not pausado:
+        tempo += dt * velocidade
+
     tela.blit(fundo, (0, 0))
 
-    disco_tras.fill((0, 0, 0, 0))
-    disco_frente.fill((0, 0, 0, 0))
-    lente.fill((0, 0, 0, 0))
+    pixels = criar_plasma(
+        tempo, inclinacao
+    )
 
-    # Separa a metade traseira da frontal
-    for p in particulas:
-        if math.sin(p["angulo"]) < 0:
-            desenhar_particula(disco_tras, p, dt)
-        else:
-            desenhar_particula(disco_frente, p, dt)
+    superficie = pygame.surfarray.make_surface(
+        pixels
+    )
 
-    # PARTE TRASEIRA
-    aplicar_brilho(tela, disco_tras)
+    superficie = pygame.transform.smoothscale(
+        superficie,
+        (LARGURA, ALTURA)
+    )
 
-    # LENTE GRAVITACIONAL
-    desenhar_lente(lente, tempo)
-    aplicar_brilho(tela, lente)
+    # O preto do plasma fica transparente
+    # para preservar as estrelas.
+    superficie.set_colorkey((0, 0, 0))
 
-    # SOMBRA DO BURACO NEGRO
+    tela.blit(superficie, (0, 0))
+
+    # Sombra central nítida
     pygame.draw.circle(
         tela,
         (2, 0, 7),
         (CX, CY),
         RAIO_SOMBRA
     )
-
-    # BORDA LUMINOSA SUAVE
-    pygame.draw.circle(
-        tela,
-        (115, 30, 90),
-        (CX, CY),
-        RAIO_SOMBRA + 2,
-        1
-    )
-
-    # PARTE FRONTAL
-    aplicar_brilho(tela, disco_frente)
 
     pygame.display.flip()
 
