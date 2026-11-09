@@ -1,289 +1,182 @@
 
 import pygame
-import numpy as np
-import math
 import random
+import math
 
 pygame.init()
 
 # ==========================================
-# PINK HOLE 5.0 - NEBULA ENGINE
+# PINK HOLE 6.0 - COSMIC NEBULA
 # ==========================================
 
 LARGURA = 1100
 ALTURA = 700
 FPS = 60
 
-# Renderizamos o plasma em resolucao
-# reduzida para melhorar o desempenho.
-ESCALA = 3
-W = LARGURA // ESCALA
-H = ALTURA // ESCALA
+tela = pygame.display.set_mode((LARGURA, ALTURA))
+pygame.display.set_caption("Pink Hole 6.0 | Cosmic Nebula")
+
+relogio = pygame.time.Clock()
 
 CX = LARGURA // 2
 CY = ALTURA // 2
 
-RAIO_SOMBRA = 65
-
-tela = pygame.display.set_mode(
-    (LARGURA, ALTURA)
-)
-
-pygame.display.set_caption(
-    "Pink Hole 5.0 | Nebula Engine"
-)
-
-relogio = pygame.time.Clock()
+RAIO_BURACO = 65
+RAIO_INTERNO = 88
+RAIO_EXTERNO = 310
 
 # ==========================================
-# FUNDO ESTRELADO
-# ==========================================
-
-random.seed(42)
-
-fundo = pygame.Surface(
-    (LARGURA, ALTURA)
-)
-
-fundo.fill((0, 0, 0))
-
-for _ in range(250):
-    x = random.randrange(LARGURA)
-    y = random.randrange(ALTURA)
-
-    brilho = random.randint(45, 200)
-
-    pygame.draw.circle(
-        fundo,
-        (brilho, brilho, brilho),
-        (x, y),
-        random.choice([1, 1, 2])
-    )
-
-# ==========================================
-# COORDENADAS DO PLASMA
-# ==========================================
-
-# O NumPy cria uma grade de coordenadas.
-# Cada posicao representa um pixel.
-
-xs = (
-    np.arange(W, dtype=np.float32)
-    * ESCALA - CX
-)
-
-ys = (
-    np.arange(H, dtype=np.float32)
-    * ESCALA - CY
-)
-
-X, Y = np.meshgrid(xs, ys)
-
-# ==========================================
-# CONFIGURACOES INTERATIVAS
+# CONTROLES
 # ==========================================
 
 inclinacao = 0.34
 velocidade = 1.0
 pausado = False
-tempo = 0.0
 
 # ==========================================
-# FUNCAO DO PLASMA
+# ESTRELAS
 # ==========================================
 
-def criar_plasma(t, inclinacao):
+random.seed(42)
 
-    # Corrige a perspectiva do disco
-    # conforme sua inclinacao.
+estrelas = []
 
-    altura = max(0.12, inclinacao)
+for _ in range(250):
+    estrelas.append((
+        random.randint(0, LARGURA - 1),
+        random.randint(0, ALTURA - 1),
+        random.randint(50, 210),
+        random.choice([1, 1, 1, 2])
+    ))
 
-    Y_DISCO = Y / altura
+# ==========================================
+# PARTICULAS
+# ==========================================
 
-    raio = np.sqrt(
-        X * X + Y_DISCO * Y_DISCO
+particulas = []
+
+QUANTIDADE = 7000
+
+for _ in range(QUANTIDADE):
+
+    distribuicao = random.random() ** 1.4
+
+    raio = (
+        RAIO_INTERNO
+        + distribuicao * (RAIO_EXTERNO - RAIO_INTERNO)
     )
 
-    angulo = np.arctan2(
-        Y_DISCO, X
+    angulo = random.uniform(0, math.tau)
+
+    velocidade_orbital = (
+        0.018 * (110 / raio) ** 1.5
     )
 
-    # Rotacao diferencial:
-    # materia interna gira mais rapido.
+    particulas.append({
+        "raio": raio,
+        "angulo": angulo,
+        "velocidade": velocidade_orbital,
+        "brilho": random.uniform(0.65, 1.0),
+        "espessura": random.uniform(-7, 7)
+    })
 
-    rotacao = (
-        t * 2.5
-        / np.maximum(raio / 100, 0.5) ** 1.5
+# ==========================================
+# CORES DA NEBULOSA
+# ==========================================
+
+def cor_particula(raio, brilho):
+
+    distancia = (
+        (raio - RAIO_INTERNO)
+        / (RAIO_EXTERNO - RAIO_INTERNO)
     )
 
-    fase = angulo - rotacao
+    if distancia < 0.20:
+        cor = (255, 225, 250)
 
-    # Textura turbulenta do plasma
-    turbulencia = (
-        np.sin(fase * 12 + raio * 0.13)
-        * np.sin(fase * 7 - raio * 0.08)
+    elif distancia < 0.48:
+        cor = (255, 135, 220)
+
+    elif distancia < 0.75:
+        cor = (255, 65, 175)
+
+    else:
+        cor = (190, 30, 120)
+
+    return tuple(
+        int(c * brilho) for c in cor
     )
 
-    turbulencia += (
-        0.5 * np.sin(
-            fase * 23 + raio * 0.21
+# ==========================================
+# BRILHO DA NEBULOSA
+# ==========================================
+
+glow = pygame.Surface(
+    (LARGURA, ALTURA),
+    pygame.SRCALPHA
+)
+
+for raio, alpha in [
+    (290, 3),
+    (240, 5),
+    (190, 8),
+    (145, 12),
+    (105, 18)
+]:
+
+    superficie = pygame.Surface(
+        (raio * 2, raio * 2),
+        pygame.SRCALPHA
+    )
+
+    pygame.draw.ellipse(
+        superficie,
+        (255, 45, 165, alpha),
+        (
+            0,
+            int(raio * 0.65),
+            raio * 2,
+            int(raio * 0.7)
         )
     )
 
-    turbulencia = (
-        turbulencia / 2.5
+    glow.blit(
+        superficie,
+        (CX - raio, CY - raio)
     )
 
-    # Disco principal
-    centro_disco = 165
+# ==========================================
+# ANEL LUMINOSO
+# ==========================================
 
-    largura_disco = 85
+anel = pygame.Surface(
+    (LARGURA, ALTURA),
+    pygame.SRCALPHA
+)
 
-    densidade = np.exp(
-        -(
-            (raio - centro_disco)
-            / largura_disco
-        ) ** 2
+for raio, alpha, largura in [
+    (76, 12, 14),
+    (73, 20, 9),
+    (70, 45, 4),
+    (68, 90, 2)
+]:
+
+    pygame.draw.circle(
+        anel,
+        (255, 115, 215, alpha),
+        (CX, CY),
+        raio,
+        largura
     )
 
-    # Reduz a luz nas bordas
-    borda_interna = np.clip(
-        (raio - 82) / 28,
-        0, 1
-    )
+# ==========================================
+# CAMADA DO DISCO
+# ==========================================
 
-    borda_externa = np.clip(
-        (315 - raio) / 65,
-        0, 1
-    )
-
-    densidade *= (
-        borda_interna * borda_externa
-    )
-
-    # Faixas luminosas
-    filamentos = (
-        0.75
-        + 0.25 * np.sin(
-            fase * 18
-            + raio * 0.10
-            + turbulencia * 3
-        )
-    )
-
-    plasma = (
-        densidade
-        * filamentos
-        * (1 + turbulencia * 0.35)
-    )
-
-    plasma = np.clip(plasma, 0, 1)
-
-    # ======================================
-    # LUZ CURVADA - EFEITO ARTISTICO
-    # ======================================
-
-    # Arcos que acompanham a geometria
-    # do disco, sem desenhar linhas.
-
-    raio_tela = np.sqrt(
-        X * X + Y * Y
-    )
-
-    arco_superior = np.exp(
-        -(
-            (
-                Y
-                + 100 * np.sqrt(
-                    np.maximum(
-                        0,
-                        1 - (X / 160) ** 2
-                    )
-                )
-            ) / 24
-        ) ** 2
-    )
-
-    arco_inferior = np.exp(
-        -(
-            (
-                Y
-                - 100 * np.sqrt(
-                    np.maximum(
-                        0,
-                        1 - (X / 160) ** 2
-                    )
-                )
-            ) / 24
-        ) ** 2
-    )
-
-    limite_arco = np.clip(
-        (170 - np.abs(X)) / 25,
-        0, 1
-    )
-
-    arcos = (
-        arco_superior + arco_inferior
-    ) * limite_arco
-
-    # Textura dos arcos acompanha
-    # o movimento do plasma.
-
-    textura_arco = (
-        0.75
-        + 0.25 * np.sin(
-            X * 0.08
-            - t * 3
-            + Y * 0.03
-        )
-    )
-
-    arcos *= textura_arco * 0.75
-
-    intensidade = np.clip(
-        plasma + arcos,
-        0, 1.4
-    )
-
-    # ======================================
-    # PALETA ROSA
-    # ======================================
-
-    vermelho = np.clip(
-        intensidade * 255,
-        0, 255
-    )
-
-    verde = np.clip(
-        intensidade ** 1.7 * 185,
-        0, 255
-    )
-
-    azul = np.clip(
-        intensidade * 190
-        + intensidade ** 2 * 55,
-        0, 255
-    )
-
-    imagem = np.stack(
-        [vermelho, verde, azul],
-        axis=-1
-    ).astype(np.uint8)
-
-    # ======================================
-    # SOMBRA DO BURACO NEGRO
-    # ======================================
-
-    sombra = raio_tela < RAIO_SOMBRA
-
-    imagem[sombra] = (2, 0, 7)
-
-    # NumPy trabalha com altura x largura,
-    # enquanto o Pygame usa largura x altura.
-    return np.transpose(imagem, (1, 0, 2))
-
+disco = pygame.Surface(
+    (LARGURA, ALTURA),
+    pygame.SRCALPHA
+)
 
 # ==========================================
 # LOOP PRINCIPAL
@@ -293,10 +186,7 @@ executando = True
 
 while executando:
 
-    dt = min(
-        relogio.tick(FPS) / 1000,
-        0.05
-    )
+    dt = min(relogio.tick(FPS) / 1000, 0.05)
 
     for evento in pygame.event.get():
 
@@ -308,63 +198,117 @@ while executando:
             if evento.key == pygame.K_ESCAPE:
                 executando = False
 
-            if evento.key == pygame.K_SPACE:
+            elif evento.key == pygame.K_SPACE:
                 pausado = not pausado
 
-            if evento.key == pygame.K_r:
+            elif evento.key == pygame.K_UP:
+                inclinacao = min(
+                    0.90,
+                    inclinacao + 0.05
+                )
+
+            elif evento.key == pygame.K_DOWN:
+                inclinacao = max(
+                    0.12,
+                    inclinacao - 0.05
+                )
+
+            elif evento.key == pygame.K_RIGHT:
+                velocidade = min(
+                    4.0,
+                    velocidade + 0.25
+                )
+
+            elif evento.key == pygame.K_LEFT:
+                velocidade = max(
+                    0.0,
+                    velocidade - 0.25
+                )
+
+            elif evento.key == pygame.K_r:
                 inclinacao = 0.34
                 velocidade = 1.0
+                pausado = False
 
-            if evento.key == pygame.K_UP:
-                inclinacao = min(
-                    0.9, inclinacao + 0.05
-                )
+    tela.fill((0, 0, 0))
 
-            if evento.key == pygame.K_DOWN:
-                inclinacao = max(
-                    0.12, inclinacao - 0.05
-                )
+    # ESTRELAS
+    for x, y, brilho, tamanho in estrelas:
 
-            if evento.key == pygame.K_RIGHT:
-                velocidade = min(
-                    4.0, velocidade + 0.25
-                )
+        pygame.draw.circle(
+            tela,
+            (brilho, brilho, brilho),
+            (x, y),
+            tamanho
+        )
 
-            if evento.key == pygame.K_LEFT:
-                velocidade = max(
-                    0.0, velocidade - 0.25
-                )
+    # BRILHO DE FUNDO
+    tela.blit(glow, (0, 0))
 
-    if not pausado:
-        tempo += dt * velocidade
+    disco.fill((0, 0, 0, 0))
 
-    tela.blit(fundo, (0, 0))
+    # PARTICULAS
+    for p in particulas:
 
-    pixels = criar_plasma(
-        tempo, inclinacao
+        if not pausado:
+            p["angulo"] = (
+                p["angulo"]
+                + p["velocidade"] * dt * 60 * velocidade
+            ) % math.tau
+
+        raio = p["raio"]
+        angulo = p["angulo"]
+
+        x = CX + math.cos(angulo) * raio
+
+        y = (
+            CY
+            + math.sin(angulo) * raio * inclinacao
+            + p["espessura"]
+        )
+
+        cor = cor_particula(
+            raio,
+            p["brilho"]
+        )
+
+        pygame.draw.circle(
+            disco,
+            (*cor, 175),
+            (int(x), int(y)),
+            2
+        )
+
+    # SUAVIZACAO
+    disco_pequeno = pygame.transform.smoothscale(
+        disco,
+        (LARGURA // 3, ALTURA // 3)
     )
 
-    superficie = pygame.surfarray.make_surface(
-        pixels
-    )
-
-    superficie = pygame.transform.smoothscale(
-        superficie,
+    disco_suave = pygame.transform.smoothscale(
+        disco_pequeno,
         (LARGURA, ALTURA)
     )
 
-    # O preto do plasma fica transparente
-    # para preservar as estrelas.
-    superficie.set_colorkey((0, 0, 0))
+    disco_suave.set_alpha(135)
 
-    tela.blit(superficie, (0, 0))
+    tela.blit(
+        disco_suave,
+        (0, 0),
+        special_flags=pygame.BLEND_RGBA_ADD
+    )
 
-    # Sombra central nítida
+    tela.blit(disco, (0, 0))
+
+    # ANEL LUMINOSO
+    tela.blit(anel, (0, 0))
+
+    # CENTRO ESCURO
     pygame.draw.circle(
         tela,
-        (2, 0, 7),
+        (3, 1, 9),
         (CX, CY),
-        RAIO_SOMBRA
+        RAIO_BURACO
     )
 
     pygame.display.flip()
